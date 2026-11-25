@@ -2,7 +2,7 @@
 
 ## 📋 Overview
 
-Build a customer support ticket management system that imports tickets from multiple file formats, automatically categorizes issues, and assigns priorities. Implement a web front-end for agents to manage tickets day to day. Focus on applying the **Context-Model-Prompt** while generating comprehensive tests and documentation using AI tools.
+Build a customer support ticket management system that imports tickets from multiple file formats, automatically categorizes issues, and assigns priorities. Implement a web front-end for agents to manage tickets day to day. Focus on applying the **Context-Model-Prompt** while generating comprehensive tests and documentation using AI tools. Also install a **memory plugin**, use it across sessions, and commit the memory-related changes with your submission.
 
 ---
 
@@ -12,6 +12,7 @@ Build a customer support ticket management system that imports tickets from mult
 - ✅ Generate comprehensive test suites with AI (>85% coverage)
 - ✅ Create multi-level documentation
 - ✅ Build a functional front-end that consumes the ticket API
+- ✅ Install and use an AI **memory plugin** so project context persists across sessions
 
 ---
 
@@ -201,6 +202,43 @@ Implement end-to-end tests.
 
 ---
 
+### Task 7: Memory Plugin — Install, Use, and Commit
+
+Set up a persistent **memory plugin** for your AI coding tool so useful project context survives across chat sessions. Use it while building Homework 2, then commit the memory-related changes to your submission branch.
+
+**Recommended options** (pick one that matches your toolchain):
+
+| Tool | Memory plugin / feature | Install hint |
+|------|-------------------------|--------------|
+| Claude Code | [claude-mem](https://github.com/thedotmack/claude-mem) | `/plugin marketplace add thedotmack/claude-mem && /plugin install claude-mem` or `npx claude-mem install` |
+| Cursor | Cursor Memories / Agent Memories (or an equivalent memory MCP/plugin) | Save durable project facts via the product memory UI / MCP |
+| Other AI IDEs | Any persistent memory / RAG / notes plugin for your agent | Document which one you chose and how you installed it |
+
+**What to store in memory (examples):**
+- Your chosen backend and front-end stack for this homework
+- Ticket model constraints, category/priority rules, and API endpoint map
+- Decisions you made (validation approach, classification heuristics, test layout)
+- Recurring pitfalls and how you fixed them (import edge cases, CORS, etc.)
+- How to run the app and tests locally
+
+**Requirements:**
+1. **Install** the memory plugin (or enable the built-in memory feature) and confirm it is active in your AI tool.
+2. **Work with memory** during implementation — add or update at least **5** durable memory entries related to this homework (not one-off chat fluff).
+3. **Use memory in a later session** — start a new chat/session and rely on stored memory (or memory search) to continue work without re-pasting the full project context. Capture evidence (screenshot or short transcript excerpt).
+4. **Commit memory changes** to your homework branch:
+   - Commit any project-local memory artifacts your plugin creates (e.g. memory DB/export, `MEMORY.md`, `.claude-mem/`, MCP config snippets) **if they are meant to be shared with the repo**.
+   - Do **not** commit secrets, API keys, private personal data, or machine-local absolute paths. Use `<private>` / ignore rules where the plugin supports them.
+   - If memory lives only in a cloud/product account (no files to commit), still commit a `docs/memory-setup.md` that records: plugin name, install steps, what you stored, and how a teammate would reproduce it — plus a screenshot of the memory entries or search UI.
+5. Document the workflow briefly in your project `README.md` under a **Memory plugin** section.
+
+**Evidence to include:**
+- Screenshot of the installed/active memory plugin (or memory settings)
+- Screenshot or export showing ≥5 homework-related memory entries
+- Screenshot of a follow-up session where the agent recalls or retrieves that memory
+- Git commit(s) on your submission branch that include the memory artifacts and/or `docs/memory-setup.md`
+
+---
+
 ## 📦 Deliverables
 
 ### 1️⃣ Source Code
@@ -218,6 +256,11 @@ Implement end-to-end tests.
 - `sample_tickets.json` (20 tickets)
 - `sample_tickets.xml` (30 tickets)
 - Invalid data files for negative tests
+
+### 5️⃣ Memory Plugin Evidence
+- Memory setup notes in `README.md` (and `docs/memory-setup.md` if memory is cloud-only)
+- Screenshots in `docs/screenshots/` (plugin active, memory entries, recall in a new session)
+- Commit(s) on your branch that add/update memory artifacts or the memory setup doc
 
 ---
 
