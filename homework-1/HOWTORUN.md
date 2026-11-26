@@ -68,10 +68,10 @@ gleam test
 Expected output:
 ```text
   Compiling banking_api
-   Compiled in 0.31s
+   Compiled in 0.35s
     Running banking_api_test.main
-.........................
-25 passed, no failures
+............................
+28 passed, no failures
 ```
 
 ---
@@ -111,6 +111,7 @@ gleam run
 | `SEED_FILE` | `demo/sample-data.json` | Path to JSON array seed file |
 | `RATE_LIMIT_REQUESTS` | `100` | Max requests per IP within the sliding window |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window duration in seconds |
+| `TRUST_PROXY` | `false` | Set `true` behind a reverse proxy to read client IP from `X-Forwarded-For` |
 
 ---
 

@@ -9,7 +9,7 @@ import wisp
 pub fn handle_request(req: wisp.Request, ctx: Context) -> wisp.Response {
   use <- wisp.log_request(req)
   use <- wisp.rescue_crashes
-  use <- rate_limiter.middleware(req, ctx.rate_limiter, fn() {
+  use <- rate_limiter.middleware(req, ctx.rate_limiter, ctx.trust_proxy, fn() {
     ctx.now_ns() / 1_000_000
   })
 

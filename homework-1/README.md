@@ -52,8 +52,8 @@ flowchart LR
    BEAM integers have arbitrary precision. Storing amounts internally as `Int` cents guarantees exact balance summation (`0.10 + 0.20 = 0.30`, never `0.30000000000000004`) while serializing cleanly to JSON numbers.
 3. **Multi-Currency Balances & Overdraft Rules:**  
    `GET /accounts/:accountId/balance` returns balances grouped by currency (`balances: {"EUR": 500.0, "USD": 1028.5}`) so distinct currencies are never improperly added together. Overdraft (negative balance) is permitted so sample transfer requests work out of the box on an empty store. Only `completed` transactions affect numeric balances; `pending` and `failed` transactions remain queryable and establish account existence (`0.0` balance rather than `404`).
-4. **Mist-to-Wisp Client IP Forwarding:**  
-   A thin wrapper around `wisp_mist.handler` extracts the peer IP via `mist.get_connection_info` and sets `x-client-ip` when `X-Forwarded-For` is absent. This makes the rate limiter work seamlessly both over live TCP sockets and in socket-free `wisp/simulate` tests.
+4. **Mist-to-Wisp Client IP Forwarding & Proxy Safety:**  
+   A thin wrapper around `wisp_mist.handler` extracts the real TCP peer IP via `mist.get_connection_info` and sets `x-client-ip`. `X-Forwarded-For` is ignored by default (preventing header spoofing on direct connections) unless `TRUST_PROXY=true` is explicitly configured, and expired IP buckets are pruned automatically inside the `RateLimiter` actor.
 5. **Opt-In Demo Seeding:**  
    The server starts with an empty store by default (`gleam run`), while `SEED_DATA=true` (enabled in `demo/run.bat` and `demo/run.sh`) seeds 7 multi-currency transactions from `demo/sample-data.json`.
 
@@ -80,7 +80,7 @@ homework-1/
 │       │   ├── transactions.gleam      # POST/GET /transactions, GET /transactions/:id
 │       │   └── accounts.gleam          # GET /accounts/:accountId/balance
 │       └── utils/currencies.gleam      # Active ISO 4217 code lookup
-├── test/                               # 25 unit & wisp/simulate HTTP tests (gleeunit)
+├── test/                               # 28 unit & wisp/simulate HTTP tests (gleeunit)
 ├── demo/                               # run.bat, run.sh, sample-requests.*, sample-data.json
 └── docs/screenshots/                   # Visual verification screenshots
 ```
@@ -131,9 +131,14 @@ Development followed a structured AI-assisted workflow instead of one-shot code 
 2. **Ecosystem Exploration Pivot (Python → Gleam + Wisp):**  
    - *Prompt:* Asked what modern, unfamiliar tech stacks exist to intentionally step outside familiar tools.
    - *Outcome:* Evaluated Rust/Axum, Go/`net/http`, Elixir/Bandit, Gleam/Wisp, Bun/Hono, and Zig; chose **Gleam + Wisp + Mist on Erlang BEAM**.
-3. **Spec-Driven Planning & Strict TDD Implementation:**  
+3. **Spec-Driven Planning, Strict TDD & Independent Code Review:**  
    - Produced a written design spec and a 6-task TDD plan with explicit module interfaces and 5 high-risk edge-case classes (*Review Focus*).
    - Executed task-by-task in strict **RED → GREEN** cycles (`validator_test`, `service_test`, `rate_limiter_test`, `api_test`), verifying compiler failures before implementing each module and committing incrementally.
+   - Ran an independent read-only whole-branch code review (`pro` model), which caught a subtle IEEE-754 float64 ULP epsilon edge case in `parse_positive_cents` and `X-Forwarded-For` trust/bucket pruning in the rate limiter — both resolved via TDD (`28/28` passing).
+
+#### Notable Prompt Excerpts
+- *Briefing prompt:* `"Before creating a plan and writing code, run a short brief with me: study the requirements in homework-1/TASKS.md and clarify all key decisions (stack details, Task 4 feature choice, balance calculation logic, edge cases, and demo/test requirements)."`
+- *Ecosystem exploration prompt:* `"The lecturer suggested having fun and picking a completely unfamiliar tech stack — tell me what interesting options exist right now?"`
 
 ### Challenges Encountered & How AI + Verification Solved Them
 | Challenge | What Happened | Resolution & Verification |
@@ -141,10 +146,11 @@ Development followed a structured AI-assisted workflow instead of one-shot code 
 | **Windows `winget` Erlang installer hang** | `winget install Erlang.ErlangOTP` hung silently without displaying a UAC prompt in headless execution. | Switched to official GitHub Releases portable ZIP archives (`otp_win64_29.1.3.zip` and `gleam-v1.19.2-x86_64-pc-windows-msvc.zip`) extracted to `%LOCALAPPDATA%\Programs` — zero UAC required and documented in `HOWTORUN.md`. |
 | **Missing `rebar3.cmd` on Windows** | Compiling `mist`'s transitive Erlang dependency `hpack_erl` failed with `Program not found: rebar3.cmd`. | Installed official `rebar3` escript with a 2-line `rebar3.cmd` wrapper in Erlang's `bin/` directory; verified clean compile (`Compiled in 2.66s`). |
 | **Gleam package API version drift** | General web examples referenced older `gleam_time` (`timestamp.now`), `mist.start_http`, and `actor.call` signatures. | Inspected the actual installed source files under `build/packages/` (`wisp v2.2.2`, `mist v6.0.3`, `gleam_otp v1.3.0`, `gleam_time v1.11.0`) to use exact current APIs (`timestamp.system_time`, `mist.start`, `process.call`, `use <- wisp.log_request`). |
-| **Gleam type vs constructor imports** | `test/validator_test.gleam` failed to compile because `ValidationError` imported only the value constructor, not the type. | Fixed with `type ValidationError` syntax caught immediately by the Gleam compiler. |
+| **Float64 ULP drift in decimal validation** | Independent code review caught that a `1.0e-6` epsilon check rejected large valid 2-decimal amounts (`99999999999.99`) and accepted `1.000000001`. | Replaced float epsilon arithmetic with exact decimal parsing from Erlang's shortest round-trip `float.to_string` (Ryū) representation; verified with new RED→GREEN unit tests. |
+| **Rate limiter proxy spoofing & stale buckets** | Unconditional `X-Forwarded-For` trust allowed direct clients to spoof headers, and expired IP keys remained in `buckets`. | Gated `X-Forwarded-For` behind `TRUST_PROXY=true` (default `false`) and added expired bucket pruning on check; verified with TDD tests. |
 
 ### Manual & Automated Verification Performed
-- **Automated suite (`gleam test`):** 25/25 unit and `wisp/simulate` HTTP integration tests passing in ~0.3s with zero compiler warnings.
+- **Automated suite (`gleam test`):** 28/28 unit and `wisp/simulate` HTTP integration tests passing in ~0.35s with zero compiler warnings.
 - **Live Mist HTTP verification:** Booted the real Mist server on port `3000` with `SEED_DATA=true` and `RATE_LIMIT_REQUESTS=8`, verified `GET /health`, `POST /transactions` (`201`), `GET /transactions/:id` (`200`), combined filtered `GET /transactions`, multi-currency `GET /accounts/ACC-12345/balance` (`{"EUR": 500.0, "USD": 1028.5}`), multi-field `400 Validation failed`, unknown account `404`, and `429 Too Many Requests` with `Retry-After` on the 9th request.
 
 ---
@@ -155,7 +161,7 @@ Visual verification captures are stored in [`docs/screenshots/`](docs/screenshot
 - [`docs/screenshots/api-running.png`](docs/screenshots/api-running.png) — Live Mist + Wisp server startup with `SEED_DATA=true` and incoming request logs
 - [`docs/screenshots/api-requests-responses.png`](docs/screenshots/api-requests-responses.png) — Live `POST /transactions`, `GET /transactions/:id`, filtered `GET /transactions`, and multi-currency `GET /accounts/:accountId/balance`
 - [`docs/screenshots/validation-and-rate-limit.png`](docs/screenshots/validation-and-rate-limit.png) — Structured `400 Validation failed`, `404 Not found`, and `429 Too Many Requests` with `X-RateLimit-*` and `Retry-After` headers
-- [`docs/screenshots/tests-passing.png`](docs/screenshots/tests-passing.png) — Full `gleam test` suite passing (25/25 tests, 0 warnings)
+- [`docs/screenshots/tests-passing.png`](docs/screenshots/tests-passing.png) — Full `gleam test` suite passing (28/28 tests, 0 warnings)
 
 ---
 

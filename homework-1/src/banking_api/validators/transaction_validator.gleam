@@ -18,7 +18,7 @@ import gleam/string
 import gleam/time/calendar
 import gleam/time/timestamp
 
-const max_amount_float: Float = 99_999_999_999.99
+const max_amount_cents: Int = 9_999_999_999_999
 
 /// Validates account ID format: ACC-XXXXX where X is ASCII alphanumeric.
 pub fn validate_account_id(account_id: String) -> Result(String, ValidationError) {
@@ -186,36 +186,47 @@ fn validate_amount_field(
 fn parse_positive_cents(dyn: Dynamic) -> Result(Int, ValidationError) {
   case decode.run(dyn, decode.int) {
     Ok(n) ->
-      case n > 0 && int.to_float(n) <=. max_amount_float {
-        True -> Ok(n * 100)
-        False ->
+      case n <= 0 {
+        True ->
           Error(ValidationError(
             field: "amount",
             message: "Amount must be a positive number",
           ))
+        False -> {
+          let cents = n * 100
+          case cents <= max_amount_cents {
+            True -> Ok(cents)
+            False ->
+              Error(ValidationError(
+                field: "amount",
+                message: "Amount exceeds maximum allowed value (99999999999.99)",
+              ))
+          }
+        }
       }
     Error(_) ->
       case decode.run(dyn, decode.float) {
         Ok(f) ->
-          case f >. 0.0 && f <=. max_amount_float {
+          case f >. 0.0 {
             False ->
               Error(ValidationError(
                 field: "amount",
                 message: "Amount must be a positive number",
               ))
-            True -> {
-              let scaled = f *. 100.0
-              let rounded = float.round(scaled)
-              let diff = float.absolute_value(scaled -. int.to_float(rounded))
-              case diff <. 1.0e-6 && rounded > 0 {
-                True -> Ok(rounded)
-                False ->
+            True ->
+              case float_to_exact_cents(f) {
+                Ok(cents) if cents > 0 && cents <= max_amount_cents -> Ok(cents)
+                Ok(cents) if cents > max_amount_cents ->
+                  Error(ValidationError(
+                    field: "amount",
+                    message: "Amount exceeds maximum allowed value (99999999999.99)",
+                  ))
+                _ ->
                   Error(ValidationError(
                     field: "amount",
                     message: "Amount must have at most 2 decimal places",
                   ))
               }
-            }
           }
         Error(_) ->
           Error(ValidationError(
@@ -223,6 +234,68 @@ fn parse_positive_cents(dyn: Dynamic) -> Result(Int, ValidationError) {
             message: "Amount must be a positive number",
           ))
       }
+  }
+}
+
+/// Converts a positive Float to exact integer cents using Erlang's shortest
+/// round-trip decimal string representation (Ryu), avoiding float ULP drift.
+fn float_to_exact_cents(f: Float) -> Result(Int, Nil) {
+  let raw = string.lowercase(float.to_string(f))
+  let #(mantissa, exp_res) = case string.split_once(raw, "e") {
+    Ok(#(m, e)) -> #(m, int.parse(e))
+    Error(_) -> #(raw, Ok(0))
+  }
+  use exp <- result.try(exp_res)
+
+  let #(int_part, frac_part) = case string.split_once(mantissa, ".") {
+    Ok(#(i, fr)) -> #(i, fr)
+    Error(_) -> #(mantissa, "")
+  }
+
+  let digits = int_part <> frac_part
+  let shift = exp - string.length(frac_part) + 2
+
+  case shift >= 0 {
+    True -> {
+      use base <- result.try(int.parse(digits))
+      Ok(base * pow10(shift, 1))
+    }
+    False -> {
+      let drop_count = -shift
+      let total_len = string.length(digits)
+      case drop_count >= total_len {
+        True ->
+          case is_all_zeros(digits) {
+            True -> Ok(0)
+            False -> Error(Nil)
+          }
+        False -> {
+          let keep_len = total_len - drop_count
+          let kept = string.slice(digits, at_index: 0, length: keep_len)
+          let dropped =
+            string.slice(digits, at_index: keep_len, length: drop_count)
+          case is_all_zeros(dropped) {
+            True -> int.parse(kept)
+            False -> Error(Nil)
+          }
+        }
+      }
+    }
+  }
+}
+
+fn pow10(exp: Int, acc: Int) -> Int {
+  case exp <= 0 {
+    True -> acc
+    False -> pow10(exp - 1, acc * 10)
+  }
+}
+
+fn is_all_zeros(s: String) -> Bool {
+  case string.pop_grapheme(s) {
+    Error(_) -> True
+    Ok(#("0", rest)) -> is_all_zeros(rest)
+    Ok(_) -> False
   }
 }
 

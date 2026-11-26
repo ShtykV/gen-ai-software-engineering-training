@@ -17,7 +17,12 @@ fn new_test_context(max_requests: Int) -> context.Context {
   let assert Ok(store) = transaction_store.start()
   let assert Ok(limiter) =
     rate_limiter.start(Config(max_requests: max_requests, window_ms: 60_000))
-  Context(store: store, rate_limiter: limiter, now_ns: fn() { fixed_now_ns })
+  Context(
+    store: store,
+    rate_limiter: limiter,
+    trust_proxy: False,
+    now_ns: fn() { fixed_now_ns },
+  )
 }
 
 pub fn health_endpoint_returns_ok_test() {
@@ -198,21 +203,21 @@ pub fn router_enforces_rate_limit_end_to_end_test() {
 
   let r1 =
     simulate.request(http.Get, "/transactions")
-    |> simulate.header("x-forwarded-for", "198.51.100.7")
+    |> simulate.header("x-client-ip", "198.51.100.7")
     |> router.handle_request(ctx)
   r1.status |> should.equal(200)
   response.get_header(r1, "x-ratelimit-remaining") |> should.equal(Ok("1"))
 
   let r2 =
     simulate.request(http.Get, "/transactions")
-    |> simulate.header("x-forwarded-for", "198.51.100.7")
+    |> simulate.header("x-client-ip", "198.51.100.7")
     |> router.handle_request(ctx)
   r2.status |> should.equal(200)
   response.get_header(r2, "x-ratelimit-remaining") |> should.equal(Ok("0"))
 
   let r3 =
     simulate.request(http.Get, "/transactions")
-    |> simulate.header("x-forwarded-for", "198.51.100.7")
+    |> simulate.header("x-client-ip", "198.51.100.7")
     |> router.handle_request(ctx)
   r3.status |> should.equal(429)
   response.get_header(r3, "retry-after") |> should.be_ok

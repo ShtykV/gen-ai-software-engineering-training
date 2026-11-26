@@ -23,6 +23,7 @@ pub type Decision {
 
 pub opaque type RateLimitMessage {
   Check(ip: String, now_ms: Int, reply: Subject(Decision))
+  ActiveBucketCount(reply: Subject(Int))
 }
 
 type LimiterState {
@@ -42,10 +43,14 @@ fn handle_message(
   message: RateLimitMessage,
 ) -> actor.Next(LimiterState, RateLimitMessage) {
   case message {
+    ActiveBucketCount(reply) -> {
+      process.send(reply, dict.size(state.buckets))
+      actor.continue(state)
+    }
     Check(ip, now_ms, reply) -> {
       let cutoff = now_ms - state.config.window_ms
-      let existing = dict.get(state.buckets, ip) |> result.unwrap([])
-      let active = list.filter(existing, fn(ts) { ts > cutoff })
+      let pruned_buckets = prune_expired_buckets(state.buckets, cutoff)
+      let active = dict.get(pruned_buckets, ip) |> result.unwrap([])
       let count = list.length(active)
 
       case count < state.config.max_requests {
@@ -54,7 +59,7 @@ fn handle_message(
           let remaining = state.config.max_requests - { count + 1 }
           let oldest = list.fold(updated, now_ms, int.min)
           let reset_epoch_s = { oldest + state.config.window_ms + 999 } / 1000
-          let next_buckets = dict.insert(state.buckets, ip, updated)
+          let next_buckets = dict.insert(pruned_buckets, ip, updated)
           process.send(
             reply,
             Allowed(
@@ -72,7 +77,7 @@ fn handle_message(
           let retry_after_s = { retry_after_ms + 999 } / 1000
           let reset_epoch_s = { reset_ms + 999 } / 1000
           let window_s = int.max(1, state.config.window_ms / 1000)
-          let next_buckets = dict.insert(state.buckets, ip, active)
+          let next_buckets = dict.insert(pruned_buckets, ip, active)
           process.send(
             reply,
             Limited(
@@ -89,6 +94,22 @@ fn handle_message(
   }
 }
 
+fn prune_expired_buckets(
+  buckets: Dict(String, List(Int)),
+  cutoff: Int,
+) -> Dict(String, List(Int)) {
+  dict.fold(buckets, dict.new(), fn(acc, ip, timestamps) {
+    case list.filter(timestamps, fn(ts) { ts > cutoff }) {
+      [] -> acc
+      active -> dict.insert(acc, ip, active)
+    }
+  })
+}
+
+pub fn active_bucket_count(limiter: Subject(RateLimitMessage)) -> Int {
+  process.call(limiter, call_timeout_ms, ActiveBucketCount)
+}
+
 pub fn check(
   limiter: Subject(RateLimitMessage),
   ip: String,
@@ -97,22 +118,27 @@ pub fn check(
   process.call(limiter, call_timeout_ms, fn(reply) { Check(ip, now_ms, reply) })
 }
 
-/// Resolves client IP from X-Forwarded-For (first entry), x-client-ip (Mist peer), or localhost.
-pub fn resolve_client_ip(req: wisp.Request) -> String {
-  case request.get_header(req, "x-forwarded-for") {
-    Ok(forwarded) -> {
-      let first =
-        forwarded
-        |> string.split(",")
-        |> list.first
-        |> result.unwrap("")
-        |> string.trim
-      case first {
-        "" -> fallback_client_ip(req)
-        ip -> ip
+/// Resolves client IP. Only trusts X-Forwarded-For when trust_proxy is True;
+/// otherwise uses the Mist peer IP (x-client-ip) or localhost fallback.
+pub fn resolve_client_ip(req: wisp.Request, trust_proxy: Bool) -> String {
+  case trust_proxy {
+    False -> fallback_client_ip(req)
+    True ->
+      case request.get_header(req, "x-forwarded-for") {
+        Ok(forwarded) -> {
+          let first =
+            forwarded
+            |> string.split(",")
+            |> list.first
+            |> result.unwrap("")
+            |> string.trim
+          case first {
+            "" -> fallback_client_ip(req)
+            ip -> ip
+          }
+        }
+        Error(_) -> fallback_client_ip(req)
       }
-    }
-    Error(_) -> fallback_client_ip(req)
   }
 }
 
@@ -131,10 +157,11 @@ fn fallback_client_ip(req: wisp.Request) -> String {
 pub fn middleware(
   req: wisp.Request,
   limiter: Subject(RateLimitMessage),
+  trust_proxy: Bool,
   now_ms: fn() -> Int,
   next: fn() -> wisp.Response,
 ) -> wisp.Response {
-  let ip = resolve_client_ip(req)
+  let ip = resolve_client_ip(req, trust_proxy)
   case check(limiter, ip, now_ms()) {
     Allowed(limit:, remaining:, reset_epoch_s:) ->
       next()

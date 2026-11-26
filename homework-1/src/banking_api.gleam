@@ -23,6 +23,7 @@ pub fn main() -> Nil {
   let max_requests = env_int("RATE_LIMIT_REQUESTS", 100)
   let window_seconds = env_int("RATE_LIMIT_WINDOW_SECONDS", 60)
   let should_seed = env_bool("SEED_DATA", False)
+  let trust_proxy = env_bool("TRUST_PROXY", False)
   let seed_file =
     envoy.get("SEED_FILE") |> result.unwrap("demo/sample-data.json")
 
@@ -52,7 +53,13 @@ pub fn main() -> Nil {
     False -> Nil
   }
 
-  let ctx = Context(store: store, rate_limiter: limiter, now_ns: now_ns)
+  let ctx =
+    Context(
+      store: store,
+      rate_limiter: limiter,
+      trust_proxy: trust_proxy,
+      now_ns: now_ns,
+    )
   let secret_key_base = wisp.random_string(64)
   let wisp_handler =
     wisp_mist.handler(

@@ -108,6 +108,34 @@ pub fn validate_rejects_invalid_amounts_test() {
       "{\"toAccount\":\"ACC-12345\",\"amount\":true,\"currency\":\"USD\",\"type\":\"deposit\"}",
     )
   list.any(errs_bool, fn(e) { e.field == "amount" }) |> should.be_true
+
+  // 9 decimal places must NOT slip past a float epsilon check
+  let assert Error(errs_tiny_dec) =
+    transaction_validator.validate_create_payload(
+      "{\"toAccount\":\"ACC-12345\",\"amount\":1.000000001,\"currency\":\"USD\",\"type\":\"deposit\"}",
+    )
+  list.any(errs_tiny_dec, fn(e) { e.field == "amount" }) |> should.be_true
+}
+
+pub fn validate_accepts_large_exact_two_decimal_amounts_test() {
+  let assert Ok(large1) =
+    transaction_validator.validate_create_payload(
+      "{\"toAccount\":\"ACC-12345\",\"amount\":1000000000.01,\"currency\":\"USD\",\"type\":\"deposit\"}",
+    )
+  large1.amount_cents |> should.equal(100_000_000_001)
+
+  let assert Ok(max_val) =
+    transaction_validator.validate_create_payload(
+      "{\"toAccount\":\"ACC-12345\",\"amount\":99999999999.99,\"currency\":\"USD\",\"type\":\"deposit\"}",
+    )
+  max_val.amount_cents |> should.equal(9_999_999_999_999)
+
+  // Above maximum allowed value is rejected
+  let assert Error(too_big) =
+    transaction_validator.validate_create_payload(
+      "{\"toAccount\":\"ACC-12345\",\"amount\":100000000000,\"currency\":\"USD\",\"type\":\"deposit\"}",
+    )
+  list.any(too_big, fn(e) { e.field == "amount" }) |> should.be_true
 }
 
 pub fn validate_rejects_self_transfer_and_missing_required_accounts_test() {

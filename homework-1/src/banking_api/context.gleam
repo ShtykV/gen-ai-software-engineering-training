@@ -6,6 +6,7 @@ pub type Context {
   Context(
     store: Subject(StoreMessage),
     rate_limiter: Subject(RateLimitMessage),
+    trust_proxy: Bool,
     now_ns: fn() -> Int,
   )
 }
