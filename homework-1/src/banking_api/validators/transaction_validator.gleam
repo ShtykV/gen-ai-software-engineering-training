@@ -83,11 +83,11 @@ pub fn validate_create_payload(
           message: "Request body must be a valid JSON object",
         ),
       ])
-    Ok(fields) -> validate_fields(fields)
+    Ok(fields) -> validate_create_fields(fields)
   }
 }
 
-fn validate_fields(
+pub fn validate_create_fields(
   fields: Dict(String, Dynamic),
 ) -> Result(ValidatedCreateInput, List(ValidationError)) {
   let type_res = validate_type_field(fields)
