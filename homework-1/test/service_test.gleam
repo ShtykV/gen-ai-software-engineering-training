@@ -245,3 +245,20 @@ pub fn pending_only_account_exists_and_unknown_account_returns_error_test() {
   transaction_service.get_account_balance(store, "ACC-NOPE1", None)
   |> should.equal(Error(Nil))
 }
+
+pub fn seed_from_demo_sample_data_file_test() {
+  let assert Ok(store) = transaction_store.start()
+  let assert Ok(count) =
+    transaction_service.seed_from_json_file(
+      store,
+      "demo/sample-data.json",
+      jan_20_ns,
+    )
+  count |> should.equal(7)
+
+  // ACC-12345: +1500.00 - 250.75 - 120.25 = 1129.00 USD (pending 300.00 excluded), +500.00 EUR
+  let assert Ok(bal) =
+    transaction_service.get_account_balance(store, "ACC-12345", None)
+  dict.get(bal.balances_cents, "USD") |> should.equal(Ok(112_900))
+  dict.get(bal.balances_cents, "EUR") |> should.equal(Ok(50_000))
+}
