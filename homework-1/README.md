@@ -158,9 +158,13 @@ Development followed a structured AI-assisted workflow instead of one-shot code 
 ## 📸 Screenshots
 
 Visual verification captures are stored in [`docs/screenshots/`](docs/screenshots/):
+- [`docs/screenshots/ai-prompt-1.png`](docs/screenshots/ai-prompt-1.png) — AI-assisted requirements briefing and unfamiliar tech-stack selection (Gleam + Wisp)
+- [`docs/screenshots/ai-prompt-2.png`](docs/screenshots/ai-prompt-2.png) — AI-generated design spec, TDD implementation plan, and code workflow
 - [`docs/screenshots/api-running.png`](docs/screenshots/api-running.png) — Live Mist + Wisp server startup with `SEED_DATA=true` and incoming request logs
 - [`docs/screenshots/api-requests-responses.png`](docs/screenshots/api-requests-responses.png) — Live `POST /transactions`, `GET /transactions/:id`, filtered `GET /transactions`, and multi-currency `GET /accounts/:accountId/balance`
-- [`docs/screenshots/validation-and-rate-limit.png`](docs/screenshots/validation-and-rate-limit.png) — Structured `400 Validation failed`, `404 Not found`, and `429 Too Many Requests` with `X-RateLimit-*` and `Retry-After` headers
+- [`docs/screenshots/sample-transactions.png`](docs/screenshots/sample-transactions.png) — Seeded sample transactions list returned by `GET /transactions`
+- [`docs/screenshots/validation.png`](docs/screenshots/validation.png) — Multi-field `400 Validation failed` response matching the `TASKS.md` contract
+- [`docs/screenshots/rate-limit.png`](docs/screenshots/rate-limit.png) — Sliding-window rate limiting (`429 Too Many Requests` with `X-RateLimit-*` and `Retry-After` headers)
 - [`docs/screenshots/tests-passing.png`](docs/screenshots/tests-passing.png) — Full `gleam test` suite passing (28/28 tests, 0 warnings)
 
 ---
